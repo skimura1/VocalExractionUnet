@@ -20,7 +20,7 @@ class DoubleConv(nn.Module):
 
 class UNET(nn.Module):
     def __init__(
-        self, in_channels=3, out_channels=1, features=[64, 128, 256, 512]
+        self, in_channels=2, out_channels=2, features=[64, 128, 256, 512]
     ):
         super(UNET, self).__init__()
         # Encode Modules
@@ -47,7 +47,7 @@ class UNET(nn.Module):
         # Bottleneck
         self.bottleneck = DoubleConv(features[-1], features[-1]*2)
 
-        # Output 1D mask
+        # Output Prediction
         self.final_conv = nn.Conv2d(features[0], out_channels, kernel_size=1)
 
     def forward(self, x):

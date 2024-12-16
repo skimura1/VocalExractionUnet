@@ -1,8 +1,7 @@
 import musdb
 from torch.utils.data import Dataset
 import torch
-from util import to_mono
-from audio_to_dbspec import AudioToDBSpectrogram
+from spectrogram import AudioToSpectrogram
 import numpy as np
 
 
@@ -19,7 +18,7 @@ class MUSDBDataset(Dataset):
         self.transform = transform
 
     def __len__(self):
-        return len(self.musdb)
+        return len(self.mdataset)
 
     def __getitem__(self, index):
         # Get the audio from musdb
@@ -30,16 +29,16 @@ class MUSDBDataset(Dataset):
         mix_signal = torch.from_numpy(mix_signal).float()
         vocal_signal = torch.from_numpy(vocal_signal).float()
 
-        # convert to mono
-        mix_signal = to_mono(mix_signal)
-        vocal_signal = to_mono(vocal_signal)
+        # # convert to mono
+        # mix_signal = self.to_mono(mix_signal)
+        # vocal_signal = self.to_mono(vocal_signal)
 
         # Use GPU if available
         mix_signal = mix_signal.to(self.device)
         vocal_signal = vocal_signal.to(self.device)
 
         # Transform into spectrogram
-        mix_spectrogram = self.transfrom(mix_signal)
+        mix_spectrogram = self.transform(mix_signal)
         vocal_spectrogram = self.transform(vocal_signal)
 
         # Get the magnitude and phase from spectrogram
@@ -60,6 +59,11 @@ class MUSDBDataset(Dataset):
 
         return mag, phase, norm_param
 
+    # def to_mono(signal):
+    #     if signal.shape[0] > 1:
+    #         signal = torch.mean(signal, dim=0, keepdim=True)
+    #     return signal
+
 
 if __name__ == "__main__":
     n_fft = 1024
@@ -73,8 +77,8 @@ if __name__ == "__main__":
         device = 'cpu'
     print(f'using device {device}')
 
-    audio_to_dbspec = AudioToDBSpectrogram()
-    musdbset = MUSDBDataset(train_musdataset, audio_to_dbspec, device)
+    audio_to_spec = AudioToSpectrogram()
+    musdbset = MUSDBDataset(train_musdataset, audio_to_spec, device)
 
     for track in musdbset:
         mix_spec, vocal_spec = track

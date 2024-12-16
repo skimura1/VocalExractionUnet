@@ -3,7 +3,6 @@ import torchaudio.transforms as T
 import numpy as np
 import torch
 import torch.nn as nn
-from util import to_mono
 
 
 class AudioToSpectrogram(nn.Module):
@@ -17,8 +16,8 @@ class AudioToSpectrogram(nn.Module):
         super().__init__()
         # Computing Complex Spectrogram (For Now)
         self.spectrogram = T.Spectrogram(
-            power=None, n_fft=1024, hop_length=512)
-        # self.amplitude_to_db = T.AmplitudeToDB(stype='power', top_db=80)
+            power=2, n_fft=1024, hop_length=512)
+        self.amplitude_to_db = T.AmplitudeToDB(stype='power', top_db=80)
 
     def forward(self, x):
         x = self.spectrogram(x)
@@ -44,10 +43,6 @@ if __name__ == "__main__":
         # Convert to Tensor
         mix_signal = torch.from_numpy(mix_signal)
         vocal_signal = torch.from_numpy(vocal_signal)
-
-        # Mix down to single channel
-        mix_signal = to_mono(mix_signal)
-        vocal_signal = to_mono(vocal_signal)
 
         # Convert to DB spectrogram
         mix_spec = audio_to_spec(mix_signal)

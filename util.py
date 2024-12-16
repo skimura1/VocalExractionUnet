@@ -1,6 +1,7 @@
 import torch
 from dataset import MUSDBDataset
-from torch.util.data import DataLoader
+from torch.utils.data import DataLoader
+import numpy as np
 import musdb
 
 
@@ -15,24 +16,21 @@ def load_checkpoint(checkpoint, model):
 
 
 def get_loaders(
-    train_dir,
-    train_maskdir,
-    val_dir,
-    val_maskdir,
+    musdb_dir,
     batch_size,
     transform,
     device,
     num_workers=4,
     pin_memory=True,
 ):
-    train_musdataset = musdb.DB('./musdb', subsets='train',
+    train_musdataset = musdb.DB(musdb_dir, subsets='train',
                                 split='train', download=False)
 
-    valid_musdataset = musdb.DB('./musdb', subsets='train',
+    valid_musdataset = musdb.DB(musdb_dir, subsets='train',
                                 split='valid', download=False)
 
     train_ds = MUSDBDataset(
-        image_dir=train_musdataset,
+        mdataset=train_musdataset,
         transform=transform,
         device=device
     )
@@ -72,6 +70,7 @@ def check_accuracy(loader, model, device="cuda"):
         for x, y in loader:
             x = x.to(device)
             y = y.to(device)
+
             preds = torch.sigmoid(model(x))
             preds = (preds > 0.5).float()
             num_correct += (preds == y).sum()
@@ -86,7 +85,17 @@ def check_accuracy(loader, model, device="cuda"):
     model.train()
 
 
-def to_mono(signal):
-    if signal.shape[0] > 1:
-        signal = torch.mean(signal, dim=0, keepdim=True)
-    return signal
+def save_predictions(
+    loader, model, folder="saved_spec/", device="cuda"
+):
+    model.eval()
+    # Save as npy
+    for idx, (x, y) in enumerate(loader):
+        x = x.to(device=device)
+        with torch.no_grad():
+            preds = torch.sigmoid(model(x))
+            preds = (preds > 0.5).float()
+        preds = preds.numpy()
+        np.save(
+            f"{folder}/pred_{idx}", preds
+        )
