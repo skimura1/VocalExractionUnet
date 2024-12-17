@@ -20,10 +20,12 @@ class DoubleConv(nn.Module):
 
 class UNET(nn.Module):
     def __init__(
-        self, in_channels=2, out_channels=2, features=[64, 128, 256, 512]
+        self, in_channels=2, out_channels=2, features=None
     ):
         super(UNET, self).__init__()
         # Encode Modules
+        if features is None:
+            features = [64, 128, 256, 512]
         self.ups = nn.ModuleList()
         # Decode Modules
         self.downs = nn.ModuleList()

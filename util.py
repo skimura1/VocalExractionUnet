@@ -3,6 +3,7 @@ from dataset import MUSDBDataset
 from torch.utils.data import DataLoader
 import numpy as np
 import musdb
+from pathlib import Path
 
 
 def save_checkpoint(state, filename="my_checkpoint.pth.tar"):
@@ -19,20 +20,22 @@ def get_loaders(
     musdb_dir,
     batch_size,
     transform,
-    device,
     num_workers=4,
     pin_memory=True,
 ):
+    musdb_path = Path(musdb_dir)
+    if not musdb_path.exists():
+        musdb_path.mkdir(parents=True)
+        musdb.DB(musdb_path, download=True)
+
     train_musdataset = musdb.DB(musdb_dir, subsets='train',
                                 split='train', download=False)
-
     valid_musdataset = musdb.DB(musdb_dir, subsets='train',
                                 split='valid', download=False)
 
     train_ds = MUSDBDataset(
         mdataset=train_musdataset,
-        transform=transform,
-        device=device
+        transform=transform
     )
 
     train_loader = DataLoader(
@@ -45,8 +48,7 @@ def get_loaders(
 
     val_ds = MUSDBDataset(
         mdataset=valid_musdataset,
-        transform=transform,
-        device=device
+        transform=transform
     )
 
     val_loader = DataLoader(
@@ -86,7 +88,7 @@ def check_accuracy(loader, model, device="cuda"):
 
 
 def save_predictions(
-    loader, model, folder="saved_spec/", device="cuda"
+    loader, model, folder="saved_spec", device="cuda"
 ):
     model.eval()
     # Save as npy
@@ -95,7 +97,45 @@ def save_predictions(
         with torch.no_grad():
             preds = torch.sigmoid(model(x))
             preds = (preds > 0.5).float()
-        preds = preds.numpy()
+        preds = preds.cpu().numpy()
         np.save(
             f"{folder}/pred_{idx}", preds
         )
+
+if __name__ == "__main__":
+    from spectrogram import AudioToSpectrogram
+
+    LEARNING_RATE = 1e-4
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    BATCH_SIZE = 4
+    NUM_EPOCHS = 3
+    NUM_WORKERS = 2
+    CHANNELS = 2
+    FREQUENCY_BIN = 513  # HEIGHT
+    FRAMES = 587  # WIDTH
+    PIN_MEMORY = False
+    LOAD_MODEL = False
+    transform = AudioToSpectrogram()
+
+    valid_musdataset = musdb.DB('./musdb', subsets='train',
+                                split='valid', download=False)
+
+    val_ds = MUSDBDataset(
+        mdataset=valid_musdataset,
+        transform=transform,
+    )
+
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=BATCH_SIZE,
+        num_workers=0,
+        pin_memory=PIN_MEMORY,
+        shuffle=False,
+    )
+    mix, vocal = val_ds[0]
+
+    print(f"mix {mix.shape}, vocal {vocal.shape})")
+
+    for mix_batch, vocal_batch in val_loader:
+        print(f"mix {mix_batch.shape}, vocal {vocal_batch.shape})")
+        print(f'mix {mix_batch}, vocal {vocal_batch})')

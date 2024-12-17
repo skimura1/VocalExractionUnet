@@ -11,16 +11,19 @@ class AudioToSpectrogram(nn.Module):
         self,
         n_fft=1024,
         hop_length=512,
-        top_db=80
+        top_db=80,
+        device='cuda'
     ):
         super().__init__()
-        # Computing Complex Spectrogram (For Now)
+        self.device = device
         self.spectrogram = T.Spectrogram(
-            power=2, n_fft=1024, hop_length=512)
-        self.amplitude_to_db = T.AmplitudeToDB(stype='power', top_db=80)
+            power=2, n_fft=n_fft, hop_length=hop_length).to(device)
+        self.amplitude_to_db = T.AmplitudeToDB(stype='power', top_db=80).to(device)
 
     def forward(self, x):
+        x = x.to(self.device)
         x = self.spectrogram(x)
+        x = self.normalize(x)
         return x
 
 
@@ -37,12 +40,12 @@ if __name__ == "__main__":
     for track in train_musdb:
         track_name = track.name
         # Get signals
-        mix_signal = track.audio.T.astype(np.float32)
-        vocal_signal = track.targets['vocals'].audio.T.astype(np.float32)
+        mix_signal = track.audio.T.astype(np.float64)
+        vocal_signal = track.targets['vocals'].audio.T.astype(np.float64)
 
         # Convert to Tensor
-        mix_signal = torch.from_numpy(mix_signal)
-        vocal_signal = torch.from_numpy(vocal_signal)
+        mix_signal = torch.from_numpy(mix_signal).to('cuda')
+        vocal_signal = torch.from_numpy(vocal_signal).to('cuda')
 
         # Convert to DB spectrogram
         mix_spec = audio_to_spec(mix_signal)

@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch
 from model import UNET
 from tqdm import tqdm
+import gc
 from spectrogram import AudioToSpectrogram
 from util import (
     load_checkpoint,
@@ -15,13 +16,16 @@ from util import (
 # Hyperparameters etc.
 LEARNING_RATE = 1e-4
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-BATCH_SIZE = 16
-NUM_EPOCHS = 3
-NUM_WORKERS = 2
+BATCH_SIZE = 4
+NUM_EPOCHS = 100
+# 0 for now because the spectrograms done on datasest...
+# Not the best for performance and shared memory since it needs to use GPU
+# TODO: Create npy of audio and vocal spectrograms to train on
+NUM_WORKERS = 0
 CHANNELS = 2
 FREQUENCY_BIN = 513  # HEIGHT
 FRAMES = 587  # WIDTH
-PIN_MEMORY = True
+PIN_MEMORY = False
 LOAD_MODEL = False
 
 """ 
@@ -38,7 +42,7 @@ def train_fn(loader, model, optimizer, loss_fn, scaler):
         targets = targets.to(device=DEVICE)
 
         # forward
-        with torch.cuda.amp.autocast():
+        with torch.amp.autocast(DEVICE):
             predictions = model(data)
             loss = loss_fn(predictions, targets)
 
@@ -54,15 +58,14 @@ def train_fn(loader, model, optimizer, loss_fn, scaler):
 
 def main():
     transform = AudioToSpectrogram()
-    model = UNET()
-    loss_fn = nn.MSELoss()
+    model = UNET().to(DEVICE)
+    loss_fn = nn.MSELoss().to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     train_loader, val_loader = get_loaders(
         musdb_dir='./musdb',
         batch_size=BATCH_SIZE,
         transform=transform,
-        device=DEVICE,
         num_workers=NUM_WORKERS,
         pin_memory=PIN_MEMORY
     )
@@ -71,7 +74,7 @@ def main():
         load_checkpoint(torch.load("my_checkpoint.pth.tar"), model)
 
     check_accuracy(val_loader, model, device=DEVICE)
-    scaler = torch.cuda.amp.GradScaler()
+    scaler = torch.amp.GradScaler(DEVICE)
 
     for epoch in range(NUM_EPOCHS):
         train_fn(train_loader, model, optimizer, loss_fn, scaler)
@@ -88,7 +91,7 @@ def main():
 
         # TODO: Maybe save vocal spectrogram and predicted spectrograms
         save_predictions(
-            val_loader, model, folder="saved_spec/", devce=DEVICE
+            val_loader, model, folder="saved_spec/", device=DEVICE
         )
 
 
