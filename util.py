@@ -6,7 +6,7 @@ import musdb
 from pathlib import Path
 
 
-def save_checkpoint(state, filename="my_checkpoint.pth.tar"):
+def save_checkpoint(state, filename="./models/my_checkpoint.pth"):
     print("=> Saving checkpoint")
     torch.save(state, filename)
 
@@ -19,23 +19,18 @@ def load_checkpoint(checkpoint, model):
 def get_loaders(
     musdb_dir,
     batch_size,
-    transform,
     num_workers=4,
     pin_memory=True,
 ):
     musdb_path = Path(musdb_dir)
     if not musdb_path.exists():
         musdb_path.mkdir(parents=True)
-        musdb.DB(musdb_path, download=True)
-
-    train_musdataset = musdb.DB(musdb_dir, subsets='train',
-                                split='train', download=False)
-    valid_musdataset = musdb.DB(musdb_dir, subsets='train',
-                                split='valid', download=False)
+        _ = musdb.DB(musdb_path, download=True)
 
     train_ds = MUSDBDataset(
-        mdataset=train_musdataset,
-        transform=transform
+        root=musdb_path,
+        subsets='train',
+        split='train'
     )
 
     train_loader = DataLoader(
@@ -46,20 +41,21 @@ def get_loaders(
         shuffle=True,
     )
 
-    val_ds = MUSDBDataset(
-        mdataset=valid_musdataset,
-        transform=transform
+    valid_ds = MUSDBDataset(
+        root=musdb_path,
+        subsets='train',
+        split='valid'
     )
 
-    val_loader = DataLoader(
-        val_ds,
+    valid_loader = DataLoader(
+        valid_ds,
         batch_size=batch_size,
         num_workers=num_workers,
         pin_memory=pin_memory,
         shuffle=False,
     )
 
-    return train_loader, val_loader
+    return train_loader, valid_loader
 
 
 def check_accuracy(loader, model, device="cuda"):
@@ -86,24 +82,23 @@ def check_accuracy(loader, model, device="cuda"):
     print(f"Dice score: {dice_score/len(loader)}")
     model.train()
 
-
 def save_predictions(
-    loader, model, folder="saved_spec", device="cuda"
+        loader, model, encoder, folder='saved_spectrograms', device='cuda'
 ):
+    print("=> Saving predictions")
     model.eval()
-    # Save as npy
+
     for idx, (x, y) in enumerate(loader):
         x = x.to(device=device)
         with torch.no_grad():
-            preds = torch.sigmoid(model(x))
-            preds = (preds > 0.5).float()
+            x = encoder(x)
+            preds = model(x)
         preds = preds.cpu().numpy()
-        np.save(
-            f"{folder}/pred_{idx}", preds
-        )
+
+        np.save(f"{folder}/predbatch_{idx}.npy", preds)
+
 
 if __name__ == "__main__":
-    from spectrogram import AudioToSpectrogram
 
     LEARNING_RATE = 1e-4
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -115,14 +110,12 @@ if __name__ == "__main__":
     FRAMES = 587  # WIDTH
     PIN_MEMORY = False
     LOAD_MODEL = False
-    transform = AudioToSpectrogram()
 
     valid_musdataset = musdb.DB('./musdb', subsets='train',
                                 split='valid', download=False)
 
     val_ds = MUSDBDataset(
         mdataset=valid_musdataset,
-        transform=transform,
     )
 
     val_loader = DataLoader(

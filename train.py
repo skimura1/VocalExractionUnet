@@ -1,15 +1,15 @@
 import torch.optim as optim
 import torch.nn as nn
 import torch
+
+import transforms
 from model import UNET
 from tqdm import tqdm
-import gc
-from spectrogram import AudioToSpectrogram
+
 from util import (
     load_checkpoint,
     save_checkpoint,
     get_loaders,
-    check_accuracy,
     save_predictions
 )
 
@@ -17,14 +17,11 @@ from util import (
 LEARNING_RATE = 1e-4
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 4
-NUM_EPOCHS = 100
-# 0 for now because the spectrograms done on datasest...
-# Not the best for performance and shared memory since it needs to use GPU
-# TODO: Create npy of audio and vocal spectrograms to train on
-NUM_WORKERS = 0
+NUM_EPOCHS = 10
+NUM_WORKERS = 4
 CHANNELS = 2
-FREQUENCY_BIN = 513  # HEIGHT
-FRAMES = 587  # WIDTH
+N_FFT = 1024  # HEIGHT
+N_HOPS = 512  # WIDTH
 PIN_MEMORY = False
 LOAD_MODEL = False
 
@@ -34,16 +31,19 @@ https://github.com/aladdinpersson/Machine-Learning-Collection/blob/558557c7989f0
 """
 
 
-def train_fn(loader, model, optimizer, loss_fn, scaler):
+def train_fn(loader, encoder, model, optimizer, loss_fn, scaler):
     loop = tqdm(loader)
 
     for batch_idx, (data, targets) in enumerate(loop):
         data = data.to(device=DEVICE)
         targets = targets.to(device=DEVICE)
 
+
         # forward
         with torch.amp.autocast(DEVICE):
+            data = encoder(data)
             predictions = model(data)
+            targets = encoder(targets)
             loss = loss_fn(predictions, targets)
 
         # backward
@@ -57,7 +57,6 @@ def train_fn(loader, model, optimizer, loss_fn, scaler):
 
 
 def main():
-    transform = AudioToSpectrogram()
     model = UNET().to(DEVICE)
     loss_fn = nn.MSELoss().to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
@@ -65,34 +64,35 @@ def main():
     train_loader, val_loader = get_loaders(
         musdb_dir='./musdb',
         batch_size=BATCH_SIZE,
-        transform=transform,
         num_workers=NUM_WORKERS,
         pin_memory=PIN_MEMORY
     )
+    stft, istft = transforms.make_filterbanks(
+        n_fft=N_FFT, hop_length=N_HOPS
+    )
+    encoder = stft
 
     if LOAD_MODEL:
         load_checkpoint(torch.load("my_checkpoint.pth.tar"), model)
 
-    check_accuracy(val_loader, model, device=DEVICE)
     scaler = torch.amp.GradScaler(DEVICE)
 
     for epoch in range(NUM_EPOCHS):
-        train_fn(train_loader, model, optimizer, loss_fn, scaler)
+        train_fn(loader=train_loader,
+                 model=model,
+                 encoder=encoder,
+                 optimizer=optimizer,
+                 loss_fn=loss_fn,
+                 scaler=scaler)
 
         # save model
         checkpoint = {
             "state_dict": model.state_dict(),
             "optimizer": optimizer.state_dict()
         }
+
         save_checkpoint(checkpoint)
-
-        # check accuracy
-        check_accuracy(val_loader, model, device=DEVICE)
-
-        # TODO: Maybe save vocal spectrogram and predicted spectrograms
-        save_predictions(
-            val_loader, model, folder="saved_spec/", device=DEVICE
-        )
+        save_predictions(val_loader, model, encoder=encoder, folder='saved_spectrograms', device='cuda')
 
 
 if __name__ == "__main__":

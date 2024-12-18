@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torchvision.transforms.functional as TF
 
+from transforms import make_filterbanks
+
 
 class DoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -85,16 +87,32 @@ class UNET(nn.Module):
 
         return self.final_conv(x)
 
+class Separator(nn.Module):
+    def __init__(self, n_fft, hop_length, model, device, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.stft, self.istft = make_filterbanks(
+            n_fft=n_fft,
+            hop_length=hop_length,
+            center=False,
+            sample_rate=44100.0,
+            device=device
+        )
+        self.model = model.to(device)
+        self.device = device
 
-def test():
-    x = torch.randn((3, 1, 160, 160))
-    model = UNET(in_channels=1, out_channels=1)
-    preds = model(x)
-    print(preds.shape)
-    print(x.shape)
+    def freeze(self):
+        for p in self.parameters():
+            p.requires_grad = False
+        self.eval()
 
-    assert preds.shape == x.shape
+    def forward(self, x):
+        """Performing the separation on audio input"""
+        x = x.to(self.device)
 
+        with torch.no_grad():
+            mix_spec = self.stft(x)
+            model_output = self.model(mix_spec)
+            estimates = self.istft(model_output)
 
-if __name__ == "__main__":
-    test()
+        return estimates
+
