@@ -6,19 +6,21 @@ from transforms import make_filterbanks
 from util import batch_normalized
 
 
-class DoubleConv(nn.Module):
+class ResDoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels):
-        super(DoubleConv, self).__init__()
+        super(ResDoubleConv, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, 3, 1, 1, bias=False),
             nn.BatchNorm2d(out_channels),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(out_channels, out_channels, 3, 1, 1, bias=False),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
+            nn.LeakyReLU(0.2, inplace=True)
         )
+        self.residual = nn.Conv2d(in_channels, out_channels, 1) if in_channels != out_channels else nn.Identity()
 
     def forward(self, x):
-        return self.conv(x)
+        return self.conv(x) + self.residual(x)
 
 
 class UNET(nn.Module):
@@ -32,12 +34,13 @@ class UNET(nn.Module):
         self.ups = nn.ModuleList()
         # Decode Modules
         self.downs = nn.ModuleList()
-        # 2x2 Maxpool after DoubleConv
+        # 2x2 Maxpool after ResDoubleConv
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.dropout = nn.Dropout(p=0.5)
 
         # Encode Step
         for feature in features:
-            self.downs.append(DoubleConv(in_channels, feature))
+            self.downs.append(ResDoubleConv(in_channels, feature))
             in_channels = feature
 
         # Decode Step
@@ -47,16 +50,17 @@ class UNET(nn.Module):
                     feature*2, feature, kernel_size=2, stride=2
                 )
             )
-            self.ups.append(DoubleConv(feature*2, feature))
+            self.ups.append(ResDoubleConv(feature*2, feature))
 
         # Bottleneck
-        self.bottleneck = DoubleConv(features[-1], features[-1]*2)
+        self.bottleneck = ResDoubleConv(features[-1], features[-1]*2)
 
         # Final Conv
-        self.final_conv = nn.Conv2d(features[0], out_channels, kernel_size=1)
+        self.final_conv = nn.Sequential(nn.Conv2d(features[0], out_channels, kernel_size=1),
+                                        nn.Sigmoid())
 
         # Final Activation
-        self.sigmoid = nn.Sigmoid()
+        # self.sigmoid = nn.Sigmoid()
         # self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
@@ -67,7 +71,7 @@ class UNET(nn.Module):
             x = down(x)
             # Add skip connection
             skip_connections.append(x)
-            x = self.pool(x)
+            x = self.dropout(self.pool(x))
 
         # Execute bottleneck
         x = self.bottleneck(x)
@@ -83,12 +87,13 @@ class UNET(nn.Module):
             skip_connection = skip_connections[idx//2]
 
             if x.shape != skip_connection.shape:
-                x = TF.resize(x, size=skip_connection.shape[2:])
+                x = TF.interpolate(x, size=skip_connection.shape[2:])
 
             # Combined skip connection and x
             concat_skip = torch.cat((skip_connection, x), dim=1)
             # Execute Double Conv
             x = self.ups[idx + 1](concat_skip)
+            x = self.dropout(x)
 
         return self.final_conv(x)
 
