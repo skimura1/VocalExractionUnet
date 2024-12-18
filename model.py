@@ -3,6 +3,7 @@ import torch.nn as nn
 import torchvision.transforms.functional as TF
 
 from transforms import make_filterbanks
+from util import batch_normalized
 
 
 class DoubleConv(nn.Module):
@@ -51,8 +52,12 @@ class UNET(nn.Module):
         # Bottleneck
         self.bottleneck = DoubleConv(features[-1], features[-1]*2)
 
-        # Output Prediction
+        # Final Conv
         self.final_conv = nn.Conv2d(features[0], out_channels, kernel_size=1)
+
+        # Final Activation
+        self.sigmoid = nn.Sigmoid()
+        # self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
         skip_connections = []
@@ -111,6 +116,7 @@ class Separator(nn.Module):
 
         with torch.no_grad():
             mix_spec = self.stft(x)
+            norm_spec = batch_normalized(mix_spec)
             model_output = self.model(mix_spec)
             estimates = self.istft(model_output)
 

@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 import numpy as np
 import musdb
 from pathlib import Path
+import json
 
 
 def save_checkpoint(state, filename="./models/my_checkpoint.pth"):
@@ -15,6 +16,14 @@ def load_checkpoint(checkpoint, model):
     print("=> Loading checkpoint")
     model.load_state_dict(checkpoint["state_dict"])
 
+def batch_normalized(data):
+    batch_min = data.amin(dim=(2, 3), keepdim=True)
+    batch_max = data.amax(dim=(2, 3), keepdim=True)
+    data_normalized = (data - batch_min) / (batch_max - batch_min)
+    return data_normalized, batch_min, batch_max
+
+def batch_denormalize(data, batch_min, batch_max):
+    return data * (batch_max - batch_min) + batch_min
 
 def get_loaders(
     musdb_dir,
@@ -92,10 +101,11 @@ def save_predictions(
         x = x.to(device=device)
         with torch.no_grad():
             x = encoder(x)
+            x, batch_min, batch_max = batch_normalized(x)
             preds = model(x)
-        preds = preds.cpu().numpy()
+            preds_denormalized = batch_denormalize(preds, batch_min, batch_max)
 
-        np.save(f"{folder}/predbatch_{idx}.npy", preds)
+        np.save(f"{folder}/predbatch_{idx}.npy", preds_denormalized.cpu().numpy())
 
 
 if __name__ == "__main__":
