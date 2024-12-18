@@ -1,18 +1,12 @@
-import torch.optim as optim
-import torch.nn as nn
 import torch
+import torch.nn as nn
+import torch.optim as optim
+from tqdm import tqdm
 
 import transforms
 from model import UNET
-from tqdm import tqdm
-
-from util import (
-    load_checkpoint,
-    save_checkpoint,
-    get_loaders,
-    save_predictions,
-    batch_normalized
-)
+from util import (batch_normalized, get_loaders, load_checkpoint,
+                  save_checkpoint, save_predictions)
 
 # Hyperparameters etc.
 LEARNING_RATE = 1e-4
@@ -32,10 +26,11 @@ https://github.com/aladdinpersson/Machine-Learning-Collection/blob/558557c7989f0
 """
 
 def validate_model(loader, encoder, model, loss_fn):
-    val_bar = tqdm(loader, desc="Validating", leave=False)
     model.eval()
     val_loss = 0
     total_samples = 0
+    
+    val_bar = tqdm(loader, desc="Validation")
 
     with torch.no_grad():
         for batch_idx, (data, targets) in enumerate(tqdm(val_bar)):
@@ -51,11 +46,16 @@ def validate_model(loader, encoder, model, loss_fn):
             val_loss += loss.item() * batch_size
             total_samples += batch_size
 
-            val_bar.set_postfix(loss=val_loss)
-    average_loss = val_loss / total_samples
-    return average_loss
+            val_bar.set_postfix(
+                loss=loss.item(),
+                avg_loss=f"{val_loss/total_samples:.4f}") 
+    return val_loss / total_samples
 
 def train_fn(loader, encoder, model, optimizer, loss_fn, scaler):
+    model.train()
+    train_loss = 0
+    total_samples = 0
+
     train_bar = tqdm(loader, desc="Training")
 
     for batch_idx, (data, targets) in enumerate(train_bar):
@@ -75,11 +75,24 @@ def train_fn(loader, encoder, model, optimizer, loss_fn, scaler):
         # backward
         optimizer.zero_grad()
         scaler.scale(loss).backward()
+        
+        # gradient clipping
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        
         scaler.step(optimizer)
         scaler.update()
+        
+        batch_size = data.size(0)
+        train_loss += loss.item() * batch_size
+        total_samples += batch_size
 
         # update tqdm loop
-        train_bar.set_postfix(loss=loss.item())
+        train_bar.set_postfix(
+            loss=loss.item(),
+            avg_loss=f"{train_loss/total_samples:.4f}",
+            lr=f"{optimizer.param_groups[0]['lr']:.2E}")
+        
+    return train_loss / total_samples
 
 
 def main():
