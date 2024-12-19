@@ -5,12 +5,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-def make_filterbanks(n_fft=1024, hop_length=512, center=False, sample_rate=44100.0, device='cuda'):
-    encoder = STFT(n_fft=n_fft, hop_length=hop_length, center=center, device=device)
-    decoder = ISTFT(n_fft=n_fft, hop_length=hop_length, device=device)
+def make_filterbanks(n_fft=1024, hop_length=512, complex=False, center=False, sample_rate=44100.0, device='cuda'):
+    if complex:
+        encoder = TorchSTFT(n_fft=n_fft, n_hop=hop_length, center=center).to(device)
+        decoder = TorchISTFT(n_fft, n_hop=hop_length, center=center).to(device)
+    else:
+        encoder = TorchASTFT(n_fft=n_fft, hop_length=hop_length, center=center, device=device)
+        decoder = TorchISTFT(n_fft=n_fft)
     return encoder, decoder
 
-class STFT(nn.Module):
+class TorchASTFT(nn.Module):
     def __init__(
         self,
         n_fft=1024,
@@ -35,7 +39,7 @@ class STFT(nn.Module):
         x = self.spectrogram(x)
         return x
 
-class ISTFT(nn.Module):
+class TorchAISTFT(nn.Module):
     def __init__(self,
         n_fft = 1024,
         hop_length= 512,
@@ -56,6 +60,96 @@ class ISTFT(nn.Module):
         y = self.griffin_lim(y)
         return y
 
+class TorchSTFT(nn.Module):
+    def __init__(
+        self,
+        n_fft = 4096,
+        n_hop = 1024,
+        center = False,
+        window = None,
+    ):
+        super(TorchSTFT, self).__init__()
+
+        self.n_fft = n_fft
+        self.n_hop = n_hop
+        self.center = center
+
+    def forward(self, x):
+        shape = x.size()
+
+        # pack batch
+        x = x.view(-1, shape[-1])
+
+        complex_stft = torch.stft(
+            x,
+            n_fft=self.n_fft,
+            hop_length=self.n_hop,
+            window=self.window,
+            center=self.center,
+            normalized=False,
+            onesided=True,
+            pad_mode="reflect",
+            return_complex=True,
+        )
+        stft_f = torch.view_as_real(complex_stft)
+        # unpack batch
+        stft_f = stft_f.view(shape[:-1] + stft_f.shape[-3:])
+        return stft_f
+
+class TorchISTFT(nn.Module):
+    def __init__(
+            self,
+            n_fft= 4096,
+            n_hop = 1024,
+            center = False,
+            sample_rate = 44100.0,
+            window = None,
+    ) -> None:
+        super(TorchISTFT, self).__init__()
+
+        self.n_fft = n_fft
+        self.n_hop = n_hop
+        self.center = center
+        self.sample_rate = sample_rate
+
+        if window is None:
+            self.window = nn.Parameter(torch.hann_window(n_fft), requires_grad=False)
+        else:
+            self.window = window
+
+
+    def forward(self, X, length = None):
+        shape = X.size()
+        X = X.reshape(-1, shape[-3], shape[-2], shape[-1])
+
+        y = torch.istft(
+            torch.view_as_complex(X),
+            n_fft=self.n_fft,
+            hop_length=self.n_hop,
+            window=self.window,
+            center=self.center,
+            normalized=False,
+            onesided=True,
+            length=length,
+        )
+
+        y = y.reshape(shape[:-3] + y.shape[-1:])
+
+        return y
+
+class ComplexNorm(nn.Module):
+    def __init__(self, mono: bool = False):
+        super(ComplexNorm, self).__init__()
+        self.mono = mono
+
+    def forward(self, spec):
+        spec = torch.abs(torch.view_as_complex(spec))
+
+        # downmix in the mag domain to preserve energy
+        if self.mono:
+            spec = torch.mean(spec, 1, keepdim=True)
+
+        return spec
 
 if __name__ == "__main__":
     from dataset import MUSDBDataset
