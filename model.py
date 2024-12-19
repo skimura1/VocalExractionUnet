@@ -17,10 +17,9 @@ class ResDoubleConv(nn.Module):
             nn.BatchNorm2d(out_channels),
             nn.LeakyReLU(0.2, inplace=True)
         )
-        self.residual = nn.Conv2d(in_channels, out_channels, 1) if in_channels != out_channels else nn.Identity()
 
     def forward(self, x):
-        return self.conv(x) + self.residual(x)
+        return self.conv(x)
 
 
 class UNET(nn.Module):
@@ -87,7 +86,7 @@ class UNET(nn.Module):
             skip_connection = skip_connections[idx//2]
 
             if x.shape != skip_connection.shape:
-                x = TF.interpolate(x, size=skip_connection.shape[2:])
+                x = nn.functional.interpolate(x, size=skip_connection.shape[2:])
 
             # Combined skip connection and x
             concat_skip = torch.cat((skip_connection, x), dim=1)
@@ -121,8 +120,8 @@ class Separator(nn.Module):
 
         with torch.no_grad():
             mix_spec = self.stft(x)
-            norm_spec = batch_normalized(mix_spec)
-            model_output = self.model(mix_spec)
+            norm_spec, _, _ = batch_normalized(mix_spec)
+            model_output = self.model(norm_spec)
             estimates = self.istft(model_output)
 
         return estimates
