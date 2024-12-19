@@ -22,15 +22,19 @@ def batch_normalized(data):
     data_normalized = (data - batch_min) / (batch_max - batch_min)
     return data_normalized, batch_min, batch_max
 
-def batch_denormalize(data, batch_min, batch_max):
-    return data * (batch_max - batch_min) + batch_min
+def batch_denormalize(data, batch_min, batch_max, phase, complex_data=False):
+    data = data * (batch_max - batch_min) + batch_min
+
+    if complex_data:
+        data = data * torch.exp(1j * phase)
+    return data
 
 def get_loaders(
     musdb_dir,
     batch_size,
     num_workers=4,
     pin_memory=True,
-    seed=42
+    samples_per_track=64
 ):
     musdb_path = Path(musdb_dir)
     if not musdb_path.exists():
@@ -40,7 +44,8 @@ def get_loaders(
     train_ds = MUSDBDataset(
         root=musdb_path,
         subsets='train',
-        split='train'
+        split='train',
+        samples_per_track=samples_per_track
     )
 
     train_loader = DataLoader(
@@ -54,7 +59,8 @@ def get_loaders(
     valid_ds = MUSDBDataset(
         root=musdb_path,
         subsets='train',
-        split='valid'
+        split='valid',
+        samples_per_track=1
     )
 
     valid_loader = DataLoader(
@@ -93,21 +99,23 @@ def check_accuracy(loader, model, device="cuda"):
     model.train()
 
 def save_predictions(
-        loader, model, encoder, folder='saved_spectrograms', device='cuda'
+        loader, model, encoder, folder='saved_spectrograms', device='cuda', complex_data=False
 ):
     print("=> Saving predictions")
     model.eval()
     # make folder if doesn't exist
     if not Path(folder).exists():
         Path(folder).mkdir()
-
+    x_phase = None
     for idx, (x, y) in enumerate(loader):
         x = x.to(device=device)
         with torch.no_grad():
             x = encoder(x)
             x, batch_min, batch_max = batch_normalized(x)
+            if complex_data:
+                x_phase = torch.angle(x)
             preds = model(x)
-            preds_denormalized = batch_denormalize(preds, batch_min, batch_max)
+            preds_denormalized = batch_denormalize(preds, batch_min, batch_max, phase=x_phase, complex_data=complex_data)
 
         np.save(f"{folder}/predbatch_{idx}.npy", preds_denormalized.cpu().numpy())
 

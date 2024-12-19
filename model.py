@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torchvision.transforms.functional as TF
 
-from transforms import make_filterbanks
-from util import batch_normalized
+from transforms import make_filterbanks, ComplexNorm
+from util import batch_normalized, batch_denormalize
 
 
 class ResDoubleConv(nn.Module):
@@ -97,8 +97,9 @@ class UNET(nn.Module):
         return self.final_conv(x)
 
 class Separator(nn.Module):
-    def __init__(self, n_fft, hop_length, model, device, *args, **kwargs):
+    def __init__(self, n_fft, hop_length, model, device, complex_data=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.complex_data = complex_data
         self.stft, self.istft = make_filterbanks(
             n_fft=n_fft,
             hop_length=hop_length,
@@ -108,6 +109,7 @@ class Separator(nn.Module):
         )
         self.model = model.to(device)
         self.device = device
+        self.complex_norm = ComplexNorm()
 
     def freeze(self):
         for p in self.parameters():
@@ -120,9 +122,13 @@ class Separator(nn.Module):
 
         with torch.no_grad():
             mix_spec = self.stft(x)
-            norm_spec, _, _ = batch_normalized(mix_spec)
+            if self.complex_data:
+                mix_spec = self.complex_norm(mix_spec)
+                mix_phase = torch.angle(mix_spec)
+            norm_spec, spec_max, spec_min = batch_normalized(mix_spec)
             model_output = self.model(norm_spec)
-            estimates = self.istft(model_output)
+            denorm_model_output = batch_denormalize(model_output, spec_min, spec_max, mix_phase, self.complex_data)
+            estimates = self.istft(denorm_model_output)
 
         return estimates
 

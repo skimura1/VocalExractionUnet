@@ -5,10 +5,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-def make_filterbanks(n_fft=1024, hop_length=512, complex=False, center=False, sample_rate=44100.0, device='cuda'):
-    if complex:
-        encoder = TorchSTFT(n_fft=n_fft, n_hop=hop_length, center=center).to(device)
-        decoder = TorchISTFT(n_fft, n_hop=hop_length, center=center).to(device)
+def make_filterbanks(n_fft=1024, hop_length=512, complex_data=False, center=False, sample_rate=44100.0, device='cuda'):
+    if complex_data:
+        encoder = TorchSTFT(n_fft=n_fft, n_hop=hop_length, center=center)
+        decoder = TorchISTFT(n_fft, n_hop=hop_length, center=center)
     else:
         encoder = TorchASTFT(n_fft=n_fft, hop_length=hop_length, center=center, device=device)
         decoder = TorchISTFT(n_fft=n_fft)
@@ -73,6 +73,11 @@ class TorchSTFT(nn.Module):
         self.n_fft = n_fft
         self.n_hop = n_hop
         self.center = center
+
+        if window is None:
+            self.window = nn.Parameter(torch.hann_window(n_fft), requires_grad=False)
+        else:
+            self.window = window
 
     def forward(self, x):
         shape = x.size()

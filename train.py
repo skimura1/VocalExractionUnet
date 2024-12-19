@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import random
+
 from tqdm import tqdm
 
 import transforms
@@ -22,7 +23,10 @@ CHANNELS = 2
 N_FFT = 1024  # HEIGHT
 N_HOPS = 512  # WIDTH
 PIN_MEMORY = False
-LOAD_MODEL = False
+COMPLEX_DATA = True
+LOAD_MODEL = True
+SAMPLES_PER_TRACK = 64
+MODEL_PATH='./my_checkpoint_7_complex.pth'
 
 """ 
 Train code has been inspired by:
@@ -111,14 +115,18 @@ def main():
         batch_size=BATCH_SIZE,
         num_workers=NUM_WORKERS,
         pin_memory=PIN_MEMORY,
+        samples_per_track=SAMPLES_PER_TRACK
     )
-    stft, istft = transforms.make_filterbanks(
-        n_fft=N_FFT, hop_length=N_HOPS
+    stft, _ = transforms.make_filterbanks(
+        n_fft=N_FFT, hop_length=N_HOPS, complex_data=COMPLEX_DATA
     )
-    encoder = stft
+    if COMPLEX_DATA:
+        encoder = torch.nn.Sequential(stft, transforms.ComplexNorm(CHANNELS == 1)).to(DEVICE)
+    else:
+        encoder = stft.to(DEVICE)
 
     if LOAD_MODEL:
-        load_checkpoint(torch.load("my_checkpoint.pth.tar"), model)
+        load_checkpoint(torch.load(MODEL_PATH), model)
 
     scaler = torch.amp.GradScaler(DEVICE)
     best_loss = float('inf')
@@ -148,10 +156,10 @@ def main():
                 "optimizer": optimizer.state_dict()
             }
             best_loss = val_loss
-            filename = f"my_checkpoint_{epoch}.pth"
+            filename = f"my_checkpoint_{epoch}_complex.pth"
             save_checkpoint(checkpoint, filename)
-            folder= f'saved_spectrograms/{epoch}'
-            save_predictions(val_loader, model, encoder=encoder, folder=folder, device='cuda')
+            folder= f'saved_spectrograms/{epoch}/complex'
+            save_predictions(val_loader, model, encoder=encoder, folder=folder, device='cuda', complex_data=COMPLEX_DATA)
         else:
             count += 1
             if count > patience:
