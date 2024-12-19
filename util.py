@@ -30,6 +30,7 @@ def get_loaders(
     batch_size,
     num_workers=4,
     pin_memory=True,
+    seed=42
 ):
     musdb_path = Path(musdb_dir)
     if not musdb_path.exists():
@@ -96,6 +97,9 @@ def save_predictions(
 ):
     print("=> Saving predictions")
     model.eval()
+    # make folder if doesn't exist
+    if not Path(folder).exists():
+        Path(folder).mkdir()
 
     for idx, (x, y) in enumerate(loader):
         x = x.to(device=device)
