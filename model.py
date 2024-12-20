@@ -105,7 +105,8 @@ class Separator(nn.Module):
             hop_length=hop_length,
             center=False,
             sample_rate=44100.0,
-            device=device
+            device=device,
+            complex_data=complex_data
         )
         self.model = model.to(device)
         self.device = device
@@ -119,15 +120,11 @@ class Separator(nn.Module):
     def forward(self, x):
         """Performing the separation on audio input"""
         x = x.to(self.device)
-
         with torch.no_grad():
             mix_spec = self.stft(x)
-            if self.complex_data:
-                mix_spec = self.complex_norm(mix_spec)
-                mix_phase = torch.angle(mix_spec)
-            norm_spec, spec_max, spec_min = batch_normalized(mix_spec)
+            norm_spec, spec_min, spec_max = batch_normalized(mix_spec)
             model_output = self.model(norm_spec)
-            denorm_model_output = batch_denormalize(model_output, spec_min, spec_max, mix_phase, self.complex_data)
+            denorm_model_output = batch_denormalize(model_output, spec_min, spec_max)
             estimates = self.istft(denorm_model_output)
 
         return estimates

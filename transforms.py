@@ -11,7 +11,7 @@ def make_filterbanks(n_fft=1024, hop_length=512, complex_data=False, center=Fals
         decoder = TorchISTFT(n_fft, n_hop=hop_length, center=center)
     else:
         encoder = TorchASTFT(n_fft=n_fft, hop_length=hop_length, center=center, device=device)
-        decoder = TorchISTFT(n_fft=n_fft)
+        decoder = TorchAISTFT(n_fft=n_fft)
     return encoder, decoder
 
 class TorchASTFT(nn.Module):
