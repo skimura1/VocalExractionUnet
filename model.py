@@ -57,6 +57,7 @@ class UNET(nn.Module):
         # Final Conv
         self.final_conv = nn.Sequential(nn.Conv2d(features[0], out_channels, kernel_size=1),
                                         nn.Sigmoid())
+        # self.final_conv = nn.Conv2d(features[0], out_channels, kernel_size=1)
 
         # Final Activation
         # self.sigmoid = nn.Sigmoid()

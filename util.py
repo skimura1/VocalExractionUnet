@@ -22,7 +22,7 @@ def batch_normalized(data):
     data_normalized = (data - batch_min) / (batch_max - batch_min)
     return data_normalized, batch_min, batch_max
 
-def batch_denormalize(data, batch_min, batch_max, phase, complex_data=False):
+def batch_denormalize(data, batch_min, batch_max, phase=None, complex_data=False):
     data = data * (batch_max - batch_min) + batch_min
 
     if complex_data:

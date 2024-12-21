@@ -14,19 +14,19 @@ from util import (batch_normalized, get_loaders, load_checkpoint,
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 # Hyperparameters etc.
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 1e-3
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-BATCH_SIZE = 4
-NUM_EPOCHS = 20
+BATCH_SIZE = 6
+NUM_EPOCHS = 100
 NUM_WORKERS = 16
 CHANNELS = 2
-N_FFT = 1024  # HEIGHT
-N_HOPS = 512  # WIDTH
+N_FFT = 2048
+N_HOPS = 1024
 PIN_MEMORY = False
-COMPLEX_DATA = True
-LOAD_MODEL = True
-SAMPLES_PER_TRACK = 64
-MODEL_PATH='./my_checkpoint_7_complex.pth'
+COMPLEX_DATA = False
+LOAD_MODEL = False
+SAMPLES_PER_TRACK = 12
+MODEL_PATH='./my_checkpoint_6.pth'
 
 """ 
 Train code has been inspired by:
@@ -130,7 +130,6 @@ def main():
 
     scaler = torch.amp.GradScaler(DEVICE)
     best_loss = float('inf')
-    patience = 5
     count = 0
 
     for epoch in range(NUM_EPOCHS):
@@ -156,14 +155,10 @@ def main():
                 "optimizer": optimizer.state_dict()
             }
             best_loss = val_loss
-            filename = f"my_checkpoint_{epoch}_complex.pth"
+            filename = f"my_checkpoint_2048_{epoch}_nosigmoid.pth"
             save_checkpoint(checkpoint, filename)
-            folder= f'saved_spectrograms/{epoch}/complex'
-            save_predictions(val_loader, model, encoder=encoder, folder=folder, device='cuda', complex_data=COMPLEX_DATA)
-        else:
-            count += 1
-            if count > patience:
-                break
+            # folder= f'saved_spectrograms/{epoch}'
+            # save_predictions(val_loader, model, encoder=encoder, folder=folder, device='cuda', complex_data=COMPLEX_DATA)
 
 if __name__ == "__main__":
     main()
