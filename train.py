@@ -20,13 +20,13 @@ BATCH_SIZE = 6
 NUM_EPOCHS = 100
 NUM_WORKERS = 16
 CHANNELS = 2
-N_FFT = 2048
-N_HOPS = 1024
+N_FFT = 4096
+N_HOPS = 2048
 PIN_MEMORY = False
 COMPLEX_DATA = False
 LOAD_MODEL = False
 SAMPLES_PER_TRACK = 12
-MODEL_PATH='./my_checkpoint_6.pth'
+MODEL_PATH= 'models/model_v1.pth'
 
 """ 
 Train code has been inspired by:
@@ -155,7 +155,7 @@ def main():
                 "optimizer": optimizer.state_dict()
             }
             best_loss = val_loss
-            filename = f"my_checkpoint_2048_{epoch}_nosigmoid.pth"
+            filename = f"my_checkpoint_4096_{epoch}.pth"
             save_checkpoint(checkpoint, filename)
             # folder= f'saved_spectrograms/{epoch}'
             # save_predictions(val_loader, model, encoder=encoder, folder=folder, device='cuda', complex_data=COMPLEX_DATA)
